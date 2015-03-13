@@ -289,6 +289,7 @@ class MLSLive:
 
         # set the user agent to get the HLS stream
         opener.addheaders = [('User-Agent', urllib.quote('PS3Application libhttp/4.5.5-000 (CellOS)'))]
+        print uri
 
         try:
             resp = opener.open(uri)
@@ -306,7 +307,54 @@ class MLSLive:
             return ""
 
         result_node = dom.getElementsByTagName('result')[0]
+        m3u8URL = result_node.getElementsByTagName('path')[0]
+        print game_xml
+        #hacked together stuff
+        header = {'Cookie' : 'nlqptid=' +  m3u8URL.split('?', 1)[1], 'User-Agent' : 'Safari/537.36 Mozilla/5.0 AppleWebKit/537.36 Chrome/31.0.1650.57', 'Accept-Encoding' : 'gzip,deflate', 'Connection' : 'Keep-Alive'}
+        if "live" in uri:
+            #Download the m3u8
+            opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
+            opener.addheaders = [('Cookie', 'nlqptid=' +  m3u8URL.split('?', 1)[1])]
+            values = {}
+            login_data = urllib.urlencode(values)
+            response = opener.open(m3u8URL, login_data)
+            m3u8File = response.read()
+        
+            #Download the keys
+            url2=''
+            for line in m3u8File.split("\n"):
+                searchTerm = "#EXT-X-KEY:METHOD=AES-128,URI="
+                if searchTerm in line:
+                    url2=line.strip().replace(searchTerm,'')[1:-1]
+            opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
+            values = {}
+            login_data = urllib.urlencode(values)
+            #This line was causing errors for buf/edm game 11/7/2014
+            #Seemed to run fine without a proper response...
+            try:
+                response = opener.open(url2, login_data)
+            except:
+                pass
+
+            #Remove unneeded cookies
+            remove = []
+            for cookie in jar:
+                if cookie.name != "nlqptid" and "as-live" not in cookie.name:
+                    remove.append(cookie)
+            for cookie in remove:
+                cj.clear(cookie.domain, cookie.path, cookie.name)
+
+            #Create header needed for playback
+            cookies = ''
+            for cookie in cj:
+                cookies = cookies + cookie.name + "=" + cookie.value + "; "
+
+            header = {'Cookie' : cookies, 'User-Agent' : 'Safari/537.36 Mozilla/5.0 AppleWebKit/537.36 Chrome/31.0.1650.57', 'Accept-Encoding' : 'gzip,deflate', 'Connection' : 'Keep-Alive'}
+            #header = {'Cookie' : cookies, 'User-Agent' : 'NHL1415/4.1030 CFNetwork/711.1.12 Darwin/14.0.0', 'Accept-Encoding' : 'gzip,deflate', 'Connection' : 'Keep-Alive'}
+            print header
+
+        result_node = dom.getElementsByTagName('result')[0]
         path_node = result_node.getElementsByTagName('path')[0]
-        stream_url = path_node.firstChild.nodeValue
+        stream_url = path_node.firstChild.nodeValue + "|" + urllib.urlencode(header)
 
         return stream_url
